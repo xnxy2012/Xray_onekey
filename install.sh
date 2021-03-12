@@ -7,6 +7,9 @@
 #	email: admin@wulabing.com
 #====================================================
 
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+stty erase ^?
+
 cd "$(
   cd "$(dirname "$0")" || exit
   pwd
@@ -24,9 +27,8 @@ OK="${Green}[OK]${Font}"
 ERROR="${Red}[ERROR]${Font}"
 
 # 变量
-shell_version="1.2.3"
+shell_version="1.2.4"
 github_branch="main"
-version_cmp="/tmp/version_cmp.tmp"
 xray_conf_dir="/usr/local/etc/xray"
 website_dir="/www/xray_web/"
 xray_access_log="/var/log/xray/access.log"
@@ -89,7 +91,7 @@ function system_check() {
     INS="apt install -y"
     # 清除可能的遗留问题
     rm -f /etc/apt/sources.list.d/nginx.list
-    $INS lsb-release
+    $INS lsb-release gnupg2
 
     echo "deb http://nginx.org/packages/debian $(lsb_release -cs) nginx" >/etc/apt/sources.list.d/nginx.list
     curl -fsSL https://nginx.org/keys/nginx_signing.key | sudo apt-key add -
@@ -100,7 +102,7 @@ function system_check() {
     INS="apt install -y"
     # 清除可能的遗留问题
     rm -f /etc/apt/sources.list.d/nginx.list
-    $INS lsb-release
+    $INS lsb-release gnupg2
 
     echo "deb http://nginx.org/packages/ubuntu $(lsb_release -cs) nginx" >/etc/apt/sources.list.d/nginx.list
     curl -fsSL https://nginx.org/keys/nginx_signing.key | sudo apt-key add -
@@ -134,8 +136,8 @@ function nginx_install() {
   fi
 }
 function dependency_install() {
-  ${INS} wget lsof
-  judge "安装 wget lsof"
+  ${INS} wget lsof tar
+  judge "安装 wget lsof tar"
 
   if [[ "${ID}" == "centos" ]]; then
     ${INS} crontabs
@@ -242,9 +244,7 @@ function port_exist_check() {
 }
 function update_sh() {
   ol_version=$(curl -L -s https://raw.githubusercontent.com/wulabing/Xray_onekey/${github_branch}/install.sh | grep "shell_version=" | head -1 | awk -F '=|"' '{print $3}')
-  echo "$ol_version" >$version_cmp
-  echo "$shell_version" >>$version_cmp
-  if [[ "$shell_version" != "$(sort -rV $version_cmp | head -1)" ]]; then
+  if [[ "$shell_version" != "$(echo -e "$shell_version\n$ol_version" | sort -rV | head -1)" ]]; then
     print_ok "存在新版本，是否更新 [Y/N]?"
     read -r update_confirm
     case $update_confirm in
@@ -439,12 +439,8 @@ function ssl_judge_and_install() {
 }
 
 function generate_certificate() {
-  openssl genrsa -des3 -passout pass:xxxx -out server.pass.key 2048
-  openssl rsa -passin pass:xxxx -in server.pass.key -out "$cert_dir/self_signed_key.pem"
-  rm -rf server.pass.key
-  openssl req -new -key "$cert_dir/self_signed_key.pem" -out server.csr -subj "/CN=$local_ip"
-  openssl x509 -req -days 3650 -in server.csr -signkey "$cert_dir/self_signed_key.pem" -out "$cert_dir/self_signed_cert.pem"
-  rm -rf server.csr
+  openssl genrsa -out $cert_dir/self_signed_key.pem 2048
+  openssl req -new -x509 -days 3650 -key $cert_dir/self_signed_key.pem -out $cert_dir/self_signed_cert.pem -subj "/CN=$local_ip"
   [[ ! -f "$cert_dir/self_signed_cert.pem" || ! -f "$cert_dir/self_signed_key.pem" ]] && print_error "生成自签名证书失败"
   print_ok "生成自签名证书成功"
   chown nobody.$cert_group $cert_dir/self_signed_cert.pem
@@ -455,7 +451,7 @@ function configure_web() {
   rm -rf /www/xray_web
   mkdir -p /www/xray_web
   # 该处保留引用源
-  wget -O web.tar.gz https://github.com/jiuqi9997/xray-yes/raw/main/web.tar.gz
+  wget -O web.tar.gz https://github.com/jiuqi9997/Xray-yes/raw/main/web.tar.gz
   tar xzf web.tar.gz -C /www/xray_web
   judge "站点伪装"
   rm -f web.tar.gz
@@ -487,8 +483,8 @@ function vless_xtls-rprx-direct_link() {
 
   print_ok "URL 链接（VLESS + TCP +  XTLS）"
   print_ok "vless://$UUID@$DOMAIN:$PORT?security=xtls&flow=$FLOW#XTLS_wulabing-$DOMAIN"
-
-  print_ok "URL 二维码（VLESS + TCP + XTLS）（请在浏览器中访问）"
+  print_ok "-------------------------------------------------"
+  print_ok "URL 二维码（VLESS + TCP + TLS）（请在浏览器中访问）"
   print_ok "https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=vless://$UUID@$DOMAIN:$PORT?security=tls%26flow=$FLOW%23TLS_wulabing-$DOMAIN"
 
   print_ok "URL 二维码（VLESS + TCP + XTLS）（请在浏览器中访问）"
